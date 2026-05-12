@@ -1,0 +1,312 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  super_admin
+  admin
+  employee
+}
+
+enum EmploymentType {
+  full_time
+  part_time
+  contract
+}
+
+enum SalaryType {
+  monthly
+  annual
+}
+
+enum AttendanceStatus {
+  present
+  absent
+  half_day  // mapped from "half-day"
+  leave
+  weekend
+
+  @@map("AttendanceStatus")
+}
+
+enum LeaveStatus {
+  pending
+  approved
+  rejected
+}
+
+enum PayrollStatus {
+  pending
+  paid
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model Company {
+  id                 Int      @id @default(autoincrement())
+  name               String   @db.VarChar(200)
+  email              String   @unique @db.VarChar(200)
+  phone              String?  @db.VarChar(50)
+  website            String?  @db.VarChar(200)
+  addressLine        String?  @map("address_line") @db.VarChar(300)
+  city               String?  @db.VarChar(100)
+  state              String?  @db.VarChar(100)
+  country            String?  @db.VarChar(100)
+  zipCode            String?  @map("zip_code") @db.VarChar(20)
+  industry           String?  @db.VarChar(100)
+  companySize        String?  @map("company_size") @db.VarChar(50)
+  registrationNumber String?  @map("registration_number") @db.VarChar(100)
+  founded            String?  @db.VarChar(10)
+  description        String?
+  logoUrl            String?  @map("logo_url") @db.VarChar(500)
+  theme              String?  @db.VarChar(1000)
+  currency           String   @default("INR") @db.VarChar(10)
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  users      User[]
+  employees  Employee[]
+  attendance Attendance[]
+  leaves     Leave[]
+  payroll    Payroll[]
+  timesheets Timesheet[]
+  timesheetEntries TimesheetEntry[]
+
+  @@index([email])
+  @@map("companies")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(200)
+  email     String   @unique @db.VarChar(200)
+  password  String   @db.VarChar(300)
+  role      UserRole
+  companyId Int?     @map("company_id")
+  phone     String?  @db.VarChar(50)
+  address   String?
+  isActive  Boolean  @default(true) @map("is_active")
+  lastLogin DateTime? @map("last_login")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  company       Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  employee      Employee?
+  reviewedLeaves Leave[]  @relation("ReviewedLeaves")
+  reviewedTimesheets TimesheetEntry[] @relation("TimesheetReviews")
+
+  @@index([email])
+  @@index([companyId])
+  @@map("users")
+}
+
+model Employee {
+  id             Int            @id @default(autoincrement())
+  userId         Int            @unique @map("user_id")
+  companyId      Int            @map("company_id")
+  employeeCode   String?        @unique @map("employee_code") @db.VarChar(50)
+  department     String?        @db.VarChar(100)
+  position       String?        @db.VarChar(100)
+  employmentType EmploymentType @default(full_time) @map("employment_type")
+  workLocation   String?        @map("work_location") @db.VarChar(150)
+  dateOfBirth    DateTime?      @map("date_of_birth") @db.Date
+  dateOfJoining  DateTime?      @map("date_of_joining") @db.Date
+  gender         String?        @db.VarChar(20)
+  salary         Decimal?       @db.Decimal(12, 2)
+  salaryType     SalaryType     @default(annual) @map("salary_type")
+  currency       String         @default("INR") @db.VarChar(10)
+  bankAccount    String?        @map("bank_account") @db.VarChar(100)
+  profilePic     String?        @map("profile_pic") @db.VarChar(500)
+  isActive       Boolean        @default(true) @map("is_active")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  emergencyContacts EmergencyContact[]
+  attendance        Attendance[]
+  leaves            Leave[]
+  payroll           Payroll[]
+  timesheets        Timesheet[]
+  timesheetEntries  TimesheetEntry[]
+
+  @@index([companyId])
+  @@map("employees")
+}
+
+model EmergencyContact {
+  id             Int      @id @default(autoincrement())
+  employeeId     Int      @map("employee_id")
+  contactName    String   @map("contact_name") @db.VarChar(200)
+  relationship   String?  @db.VarChar(100)
+  phone          String?  @db.VarChar(50)
+  alternatePhone String?  @map("alternate_phone") @db.VarChar(50)
+  address        String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("emergency_contacts")
+}
+
+model Attendance {
+  id           Int              @id @default(autoincrement())
+  employeeId   Int              @map("employee_id")
+  companyId    Int              @map("company_id")
+  date         DateTime         @db.Date
+  checkInTime  DateTime?        @map("check_in_time")
+  checkOutTime DateTime?        @map("check_out_time")
+  status       AttendanceStatus @default(present)
+  notes        String?
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@index([employeeId])
+  @@index([date])
+  @@map("attendance")
+}
+
+model Leave {
+  id         Int         @id @default(autoincrement())
+  employeeId Int         @map("employee_id")
+  companyId  Int         @map("company_id")
+  leaveType  String      @map("leave_type") @db.VarChar(50)
+  fromDate   DateTime    @map("from_date") @db.Date
+  toDate     DateTime    @map("to_date") @db.Date
+  days       Int         @default(1)
+  reason     String?
+  status     LeaveStatus @default(pending)
+  reviewedBy Int?        @map("reviewed_by")
+  reviewNote String?     @map("review_note")
+  reviewedAt DateTime?   @map("reviewed_at")
+  appliedOn  DateTime    @default(now()) @map("applied_on") @db.Date
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  reviewer User?    @relation("ReviewedLeaves", fields: [reviewedBy], references: [id])
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("leaves")
+}
+
+model Payroll {
+  id         Int           @id @default(autoincrement())
+  employeeId Int           @map("employee_id")
+  companyId  Int           @map("company_id")
+  month      String        @db.VarChar(7)
+  basic      Decimal       @default(0) @db.Decimal(12, 2)
+  hra        Decimal       @default(0) @db.Decimal(12, 2)
+  allowances Decimal       @default(0) @db.Decimal(12, 2)
+  bonus      Decimal       @default(0) @db.Decimal(12, 2)
+  grossPay   Decimal       @default(0) @map("gross_pay") @db.Decimal(12, 2)
+  deductions Decimal       @default(0) @db.Decimal(12, 2)
+  tax        Decimal       @default(0) @db.Decimal(12, 2)
+  pf         Decimal       @default(0) @db.Decimal(12, 2)
+  esi        Decimal       @default(0) @db.Decimal(12, 2)
+  totalDeductions Decimal  @default(0) @map("total_deductions") @db.Decimal(12, 2)
+  netPay     Decimal       @default(0) @map("net_pay") @db.Decimal(12, 2)
+  status     PayrollStatus @default(pending)
+  paidOn     DateTime?     @map("paid_on") @db.Date
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, month])
+  @@index([employeeId])
+  @@map("payroll")
+}
+
+// ─── Timesheet Models ─────────────────────────────────────────────────────────
+
+enum TimesheetStatus {
+  completed
+  in_progress
+  pending
+}
+
+enum TimesheetApprovalStatus {
+  pending
+  approved
+  rejected
+}
+
+model Timesheet {
+  id         Int      @id @default(autoincrement())
+  employeeId Int      @map("employee_id")
+  companyId  Int      @map("company_id")
+  weekStart  DateTime @map("week_start") @db.Date
+  weekEnd    DateTime @map("week_end") @db.Date
+  totalHours Decimal  @default(0) @map("total_hours") @db.Decimal(6, 2)
+  notes      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  employee Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  entries  TimesheetEntry[]
+
+  @@unique([employeeId, weekStart])
+  @@index([companyId])
+  @@index([weekStart])
+  @@map("timesheets")
+}
+
+model TimesheetEntry {
+  id             Int                      @id @default(autoincrement())
+  timesheetId    Int?                     @map("timesheet_id")
+  employeeId     Int                      @map("employee_id")
+  companyId      Int                      @map("company_id")
+  date           DateTime                 @db.Date
+  startTime      String                   @map("start_time") @db.VarChar(5)  // HH:MM
+  endTime        String                   @map("end_time") @db.VarChar(5)    // HH:MM
+  hours          Decimal                  @db.Decimal(4, 2)
+  taskTitle      String                   @map("task_title") @db.VarChar(300)
+  description    String?
+  project        String?                  @db.VarChar(200)
+  category       String                   @default("Development") @db.VarChar(100)
+  status         TimesheetStatus          @default(completed)
+  approvalStatus TimesheetApprovalStatus  @default(pending) @map("approval_status")
+  reviewedBy     Int?                     @map("reviewed_by")
+  reviewNote     String?                  @map("review_note")
+  reviewedAt     DateTime?                @map("reviewed_at")
+  createdAt      DateTime                 @default(now()) @map("created_at")
+  updatedAt      DateTime                 @updatedAt @map("updated_at")
+
+  // Relations
+  timesheet  Timesheet? @relation(fields: [timesheetId], references: [id], onDelete: SetNull)
+  employee   Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  reviewer   User?      @relation("TimesheetReviews", fields: [reviewedBy], references: [id])
+
+  @@index([employeeId])
+  @@index([date])
+  @@index([approvalStatus])
+  @@map("timesheet_entries")
+}

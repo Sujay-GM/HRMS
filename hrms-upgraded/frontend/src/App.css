@@ -1,0 +1,6 @@
+/* App.css — kept minimal; all design tokens live in index.css */
+#root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
